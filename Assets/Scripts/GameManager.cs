@@ -41,59 +41,6 @@ public class GameManager : MonoBehaviour
         return new Wallet(privateKey);
     }
 
-    // Create the Transfer transaction with a message
-    async private Task<kleversdk.provider.Dto.Transaction> Transfer(string fromAddress, string toAddress, float amount, long nonce, string kda, string message){
-        long precision = 6;
-        bool isNFT = false;
-        if (kda.Contains("/")) {
-            isNFT = true;
-            precision = 0;
-        }
-
-        if (!isNFT && kda.Length > 0 && kda != "KLV" && kda != "KFI")
-        {
-            try
-            {
-                var asset = await kleverProvider.GetAsset(kda);
-                precision = asset.Precision;
-            }catch(Exception e)
-            {
-                throw e;
-            }
-        }
-
-        List<IContract> contracts = new List<IContract>();
-
-        long parsedAmount = Convert.ToInt64(amount * (Math.Pow(10, precision)));
-        contracts.Add(new TransferContract(toAddress, parsedAmount, kda));
-
-        var encondedMessage = this.EncodeMessage(message);
-
-        // Build Transaction
-            var data = new SendRequest
-            {
-                Type = 0,
-                Sender = fromAddress,
-                Nonce = nonce,
-                Data = encondedMessage,
-                Contracts = contracts,
-            };
-
-        return await kleverProvider.PrepareTransaction(data);
-    }
-
-    // Encode Message
-    private byte[][] EncodeMessage(string message){
-
-        byte[][] encodedMessage = new byte[1][];
-
-        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(message);;
-
-        encodedMessage[0] = bytes;
-
-        return encodedMessage;
-    }
-
     // Send Transaction with Memo
     async public void Send(){
         var wallet = DeriveAddressByPK();
@@ -106,7 +53,7 @@ public class GameManager : MonoBehaviour
 
         string message = string.Format("Highscore of {0}: {1}",acc.Address.Bech32,highScoreText.text);
 
-        var tx = await this.Transfer(acc.Address.Bech32,toAddress,0.000001f,acc.Nonce,"KLV",message);    
+        var tx = await this.kleverProvider.SendWithMessage(acc.Address.Bech32,acc.Nonce,toAddress,0.000001f,message);
         var decoded = await this.kleverProvider.Decode(tx);
         var signature = wallet.SignHex(decoded.Hash);
         tx.AddSignature(signature);
