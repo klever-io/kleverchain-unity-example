@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 using kleversdk.core;
 using kleversdk.provider;
@@ -15,12 +16,15 @@ public class GameManager : MonoBehaviour
 
     // Blockchain Params
 
-    // Add your private key and the address you want to send klv to test the game.
     private KleverProvider kleverProvider;
+
+    // Smart Contract Params
+    private string rawABI = "";
+    private JsonABI abi;
+
+    // Add your private key and the address you want to send klv to test the game.
     private string privateKey = "";
     private string toAddress = "";
-
-
 
     // Game Params
 
@@ -63,16 +67,52 @@ public class GameManager : MonoBehaviour
         Debug.Log(broadcastResult.String());
     }
 
+    // Send HighScore to a SmartContract
+    async public void SendHighScore(){
+        var wallet = DeriveAddressByPK();
+        Account acc = wallet.GetAccount();
+        try
+        {
+            await acc.Sync(this.kleverProvider);
+        }
+        catch (Exception e)
+        {
+            Debug.Log(e.ToString());
+        }
+
+        // Build TX
+        List<string[]> scParams = new List<string[]> {
+            new string[] { "BigUint", "23" },
+        };
+
+        var parameters = kleversdk.core.SmartContract.ToEncodeInvokeSmartContract("register_score", scParams);
+
+        var scType = 0; // Invoke Type
+        var smartContractAddress = "klv1qqqqqqqqqqqqqpgq6xcrln5p5gtt8p0datwl48jy4xj0rees0n0q469wwk"; // High Score Testnet Address
+        var callValue = new Dictionary<string, long> { };
+
+        var tx = await kleverProvider.SmartContract(acc.Address.Bech32, acc.Nonce, null, scType, smartContractAddress, callValue, parameters);
+        var decoded = await kleverProvider.Decode(tx);
+        var signature = wallet.SignHex(decoded.Hash);
+        tx.AddSignature(signature);
+        var broadcastResult = await kleverProvider.Broadcast(tx);
+
+
+        Debug.Log(broadcastResult.String());
+    }
+
     // Game Methods
 
     private void Awake(){
         Application.targetFrameRate = 60;
 
         // comment if you want keep the highscore.
-        PlayerPrefs.DeleteAll();
+       // PlayerPrefs.DeleteAll();
 
         // need to instantiate the kleverProvider to use the kleverchain sdk
         kleverProvider = new KleverProvider(new NetworkConfig(kleversdk.provider.Network.TestNet));
+        // save abi in memory
+        abi = kleversdk.core.ABI.LoadABIByString(rawABI);
 
         if (PlayerPrefs.HasKey(highScoreKey)){
             highScoreText.text = PlayerPrefs.GetString(highScoreKey);
@@ -142,6 +182,4 @@ public class GameManager : MonoBehaviour
     public void IncreaseScore(){
         updateScore(score + 1);
     }
-
-
 }
